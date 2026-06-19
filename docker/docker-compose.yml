@@ -89,24 +89,37 @@ services:
     restart: always
 
   spark-master:
-    image: bitnami/spark:3.5
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.spark
     container_name: spark_master
-    environment:
-      SPARK_MODE: master
+    entrypoint: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.master.Master"]
     ports:
       - "8081:8080"
       - "7077:7077"
+    volumes:
+      - ../src:/opt/spark/src
+    environment:
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
     networks:
       - lakehouse-net
 
   spark-worker:
-    image: bitnami/spark:3.5
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.spark
     container_name: spark_worker
-    environment:
-      SPARK_MODE: worker
-      SPARK_MASTER_URL: spark://spark_master:7077
+    entrypoint: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.worker.Worker", "spark://spark-master:7077"]
     depends_on:
       - spark-master
+    volumes:
+      - ../src:/opt/spark/src
+    environment:
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
     networks:
       - lakehouse-net
 
