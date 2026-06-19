@@ -10,15 +10,20 @@ x-airflow-common: &airflow-common
     AIRFLOW__CORE__EXECUTOR: LocalExecutor
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:${AIRFLOW_DB_PASSWORD}@postgres/airflow
     AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY}
-    AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_SECRET_KEY}
+    AIRFLOW__API__AUTH_BACKEND: airflow.api.auth.backend.basic_auth
+    AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW_SECRET_KEY}
+    AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://airflow-webserver:8080/execution/
+    AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_USERS: "admin:Admin"
+    AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_PASSWORDS_FILE: /opt/airflow/simple_auth_manager_passwords.json
     MINIO_ENDPOINT: http://minio:9000
     MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
     MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
-    SPARK_MASTER_URL: spark://spark_master:7077
+    SPARK_MASTER_URL: spark://spark-master:7077
   volumes:
     - ../dags:/opt/airflow/dags
     - ../src:/opt/airflow/src
     - airflow_logs:/opt/airflow/logs
+    - airflow_auth:/opt/airflow
   networks:
     - lakehouse-net
   depends_on:
@@ -65,20 +70,16 @@ services:
     command:
       - bash
       - -c
-      - >-
-        airflow db migrate &&
-        airflow users create
-        --username admin
-        --password ${AIRFLOW_ADMIN_PASSWORD}
-        --firstname Admin
-        --lastname User
-        --role Admin
-        --email admin@example.com
+      - |
+        airflow db migrate
+        python3 -c "import json,os; f='/opt/airflow/simple_auth_manager_passwords.json'; p=json.load(open(f)) if os.path.exists(f) else {}; p.setdefault('admin',os.environ['AIRFLOW_ADMIN_PASSWORD']); open(f,'w').write(json.dumps(p))"
+    environment:
+      AIRFLOW_ADMIN_PASSWORD: ${AIRFLOW_ADMIN_PASSWORD}
     restart: "no"
   airflow-webserver:
     <<: *airflow-common
     container_name: airflow_webserver
-    command: webserver
+    command: api-server
     ports:
       - "8080:8080"
     restart: always
@@ -86,6 +87,12 @@ services:
     <<: *airflow-common
     container_name: airflow_scheduler
     command: scheduler
+    restart: always
+
+  airflow-dag-processor:
+    <<: *airflow-common
+    container_name: airflow_dag_processor
+    command: dag-processor
     restart: always
 
   spark-master:
@@ -131,3 +138,4 @@ volumes:
   minio_data:
   postgres_data:
   airflow_logs:
+  airflow_auth:
