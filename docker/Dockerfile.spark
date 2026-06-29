@@ -23,11 +23,15 @@ RUN wget -q "https://archive.apache.org/dist/spark/spark-${SPARK_VERSION}/spark-
 
 ADD https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.3.4/hadoop-aws-3.3.4.jar ${SPARK_HOME}/jars/
 ADD https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/1.12.262/aws-java-sdk-bundle-1.12.262.jar ${SPARK_HOME}/jars/
+ADD https://repo1.maven.org/maven2/io/delta/delta-spark_2.12/3.2.0/delta-spark_2.12-3.2.0.jar ${SPARK_HOME}/jars/
+ADD https://repo1.maven.org/maven2/io/delta/delta-storage/3.2.0/delta-storage-3.2.0.jar ${SPARK_HOME}/jars/
 
 RUN chmod 644 ${SPARK_HOME}/jars/hadoop-aws-3.3.4.jar \
-    && chmod 644 ${SPARK_HOME}/jars/aws-java-sdk-bundle-1.12.262.jar
+    && chmod 644 ${SPARK_HOME}/jars/aws-java-sdk-bundle-1.12.262.jar \
+    && chmod 644 ${SPARK_HOME}/jars/delta-spark_2.12-3.2.0.jar \
+    && chmod 644 ${SPARK_HOME}/jars/delta-storage-3.2.0.jar
 
-RUN pip install --no-cache-dir requests pyspark==${SPARK_VERSION}
+RUN pip install --no-cache-dir requests pyspark==${SPARK_VERSION} delta-spark==3.2.0
 
 RUN useradd -m -u 1000 spark \
     && mkdir -p ${SPARK_HOME}/work ${SPARK_HOME}/logs \
