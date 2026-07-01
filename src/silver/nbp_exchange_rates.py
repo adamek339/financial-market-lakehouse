@@ -1,5 +1,6 @@
 import os
 import logging
+import time
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 from delta.tables import DeltaTable
@@ -30,12 +31,17 @@ def get_watermark(spark: SparkSession, silver_path: str):
     return spark.read.format("delta").load(silver_path).agg(F.max("date")).collect()[0][0]
 
 def main():
+    start_time = time.time()
     spark = get_spark_session()
+
     watermark = get_watermark(spark, SILVER_PATH)
+    logger.info(f"Watermark: {watermark}")
 
     df_bronze = spark.read.json(BRONZE_PATH)
     if watermark is not None:
         df_bronze = df_bronze.filter(F.col("ingestion_date") > watermark)
+
+    logger.info(f"Bronze partitions to process: {df_bronze.count()}")
 
     df_exploded = df_bronze.select(
         F.col("effectiveDate").cast("date").alias("date"),
@@ -49,6 +55,8 @@ def main():
         F.lit("NBP").alias("source")
     )
 
+    logger.info(f"Exchange rate records to process: {df_flat.count()}")
+
     if DeltaTable.isDeltaTable(spark, SILVER_PATH):
         delta_table = DeltaTable.forPath(spark, SILVER_PATH)
         delta_table.alias("target").merge(
@@ -57,8 +65,12 @@ def main():
         ).whenMatchedUpdateAll() \
          .whenNotMatchedInsertAll() \
          .execute()
+        logger.info("MERGE completed successfully")
     else:
         df_flat.write.format("delta").save(SILVER_PATH)
+        logger.info("Initial write completed successfully")
+
+    logger.info(f"Job completed in {time.time() - start_time:.2f}s")
 
 
 if __name__ == "__main__":
